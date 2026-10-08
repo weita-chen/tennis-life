@@ -9,7 +9,7 @@ export const STAT_LABEL: Record<StatKey, string> = {
   strength: "力量",
   speed: "速度",
   iq: "球商",
-  mental: "心理",
+  mental: "心理素質",
   pressure: "抗壓",
   experience: "比賽經驗",
 };
@@ -48,7 +48,7 @@ export function money(n: number): string {
 export function rankLabel(state: Pick<GameState, "ranking" | "juniorRank" | "path" | "age">): string {
   if (state.ranking) return `世界第 ${state.ranking}`;
   if (state.path === "college" && state.age <= 22) {
-    return state.juniorRank ? `大專第 ${state.juniorRank}` : "大專網球";
+    return state.juniorRank ? `大學第 ${state.juniorRank}` : "大學網球";
   }
   if (state.age < 18) return state.juniorRank ? `青少年第 ${state.juniorRank}` : "尚未排名";
   return "未入排名";
@@ -61,8 +61,8 @@ export function stageLabel(state: Pick<GameState, "path" | "age" | "ranking" | "
   if (state.age < 18) return "青少年";
   const r = state.ranking;
   if (r && r <= 120) return "ATP";
-  if (r && r <= 350) return "ATP 125";
-  if (state.path === "pro") return r ? "ATP 125" : "ITF";
+  if (r && r <= 350) return "挑戰賽";
+  if (state.path === "pro") return r ? "挑戰賽" : "ITF";
   return "ITF";
 }
 

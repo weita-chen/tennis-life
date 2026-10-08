@@ -1,6 +1,8 @@
-import { COACHES, coachById, wealthLabel } from "./coaches";
+import { coachById, wealthLabel } from "./coaches";
 import { createLife, randomSeed } from "./create";
 import { buildEnding } from "./ending";
+import { captureSeasonMemories, responseCard, snap, stampChoice, traceLine } from "./feedback";
+import { eventCard, planYear, resolveEvent } from "./events";
 import {
   ALL_KEYS,
   STAT_LABEL,
@@ -14,9 +16,66 @@ import {
 import { ASIAN_GAMES, OLYMPICS, worldNews } from "./history";
 import { clamp, pick, rngFor, weighted } from "./rng";
 import { simulateSeason, train, type Focus } from "./sim";
-import type { Choice, Coach, GameState, StoryCard, Summary } from "./types";
+import type { Choice, GameState, StoryCard, Summary } from "./types";
 
-const PARTNERS = ["林可恩", "周安祈", "高以夏", "許知夏", "簡寧"];
+const PARTNERS = [
+  "林怡君",
+  "陳雅婷",
+  "張雅雯",
+  "黃郁婷",
+  "吳佩珊",
+  "李佳蓉",
+  "王思婷",
+  "劉欣怡",
+  "蔡宜蓁",
+  "許雅筑",
+  "鄭婉婷",
+  "謝宜庭",
+  "楊淑雯",
+  "周怡安",
+  "曾婉如",
+  "郭靜怡",
+  "洪嘉君",
+  "邱郁晴",
+  "葉欣怡",
+  "林妍希",
+  "陳怡安",
+  "張家瑜",
+  "黃珮瑜",
+  "吳佳穎",
+  "李欣怡",
+  "王怡婷",
+  "蔡佳蓉",
+  "許芳瑜",
+  "鄭羽珊",
+  "謝佳玲",
+  "楊雅涵",
+  "周欣儀",
+  "曾雅婷",
+  "郭怡伶",
+  "洪郁雯",
+  "邱雅玲",
+];
+
+export function hydrate(s: GameState): GameState {
+  if (!s.flags) s.flags = {};
+  if (!s.rivals) s.rivals = [];
+  if (!s.investments) s.investments = [];
+  if (!s.echoes) s.echoes = [];
+  if (!s.yearQueue) s.yearQueue = [];
+  if (!s.memories) s.memories = [];
+  if (!s.memories.some((m) => m.id === "firstCoach") && s.coachesHad[0]) {
+    s.memories.unshift({
+      id: "firstCoach",
+      year: s.year - (s.age - 6),
+      age: 6,
+      text: `第一個教練是${s.coachesHad[0]}。`,
+    });
+  }
+  if (!s.lastJunior) s.lastJunior = { nat: null, asia: null };
+  if (s.bigTour == null) s.bigTour = false;
+  return s;
+}
 
 export function startLife(name: string, seed?: string): GameState {
   const cleaned = (seed ?? "")
@@ -28,9 +87,19 @@ export function startLife(name: string, seed?: string): GameState {
 }
 
 export function act(prev: GameState, choiceId: string): GameState {
-  const s = structuredClone(prev);
+  const s = hydrate(structuredClone(prev));
   if (s.phaseInYear === "ending" || s.card.kind === "ending") return s;
 
+  if (choiceId === "ack") return present(s);
+  if (choiceId === "ack:season") {
+    captureSeasonMemories(s);
+    s.phaseInYear = "season";
+    s.card = {
+      kind: "season",
+      report: s.season ?? { results: [], injuryNote: null, biggestWin: null, quiet: true },
+    };
+    return s;
+  }
   if (choiceId === "begin") return openYear(s);
   if (choiceId === "to-summary") return showSummary(s);
   if (choiceId === "next-year") {
@@ -47,14 +116,32 @@ export function act(prev: GameState, choiceId: string): GameState {
   if (choiceId.startsWith("retire")) return finish(s, retireReason(s, choiceId));
   if (choiceId === "child:skip") return skipToThirteen(s);
   if (choiceId === "teen:start") return openYear(s);
-  if (choiceId === "child:play") return runYear(s, childFocus(s));
-  if (choiceId.startsWith("train:")) return runYear(s, choiceId.slice(6) as Focus);
+  if (choiceId === "child:play") {
+    runYear(s, childFocus(s));
+    captureSeasonMemories(s);
+    return s;
+  }
+  if (choiceId.startsWith("train:")) {
+    const label = choiceLabel(s, choiceId);
+    const subject = s.card.kind === "story" ? s.card.title : "這一年";
+    const before = snap(s);
+    runYear(s, choiceId.slice(6) as Focus);
+    s.phaseInYear = "script";
+    s.card = responseCard(s, before, choiceId, label, subject, "ack:season", "看這一季");
+    return s;
+  }
 
-  resolveChoice(s, choiceId);
-  return trainingCard(s);
+  const label = choiceLabel(s, choiceId);
+  const subject = s.card.kind === "story" ? s.card.title : "這次";
+  const before = snap(s);
+  commit(s, choiceId);
+  s.phaseInYear = "script";
+  s.card = responseCard(s, before, choiceId, label, subject, "ack", "繼續");
+  return s;
 }
 
 export function choicesFor(s: GameState): Choice[] {
+  hydrate(s);
   if (s.phaseInYear === "ending" || s.card.kind === "ending") return [];
   if (s.card.kind === "story") {
     if (s.age <= 12 && !s.card.choices.some((c) => c.id === "child:skip")) {
@@ -127,7 +214,7 @@ function childSkip(s: GameState): Choice[] {
     {
       id: "child:skip",
       label: "跳到十三歲",
-      hint: "中間照家裡和教練的決定打完，直接看十三歲的排名和狀況。",
+      hint: "中間的選擇走穩的那一邊，直接看十三歲的排名和狀況。",
       tone: "quiet",
     },
   ];
@@ -135,15 +222,27 @@ function childSkip(s: GameState): Choice[] {
 
 function skipToThirteen(s: GameState): GameState {
   if (s.age > 12) return s;
-  const prepared = s.decisionIds.some((id) => id.startsWith(`child-focus:${s.year}:`));
-  if (!prepared) openYear(s);
-  if (s.season == null) runYear(s, childFocus(s));
+  const finishChildYear = () => {
+    if (!hasChildFocus(s)) {
+      if (s.phaseInYear === "intro" || s.yearQueue.length === 0) openYear(s);
+      drainChild(s);
+    }
+    if (s.season == null) {
+      runYear(s, childFocus(s));
+      captureSeasonMemories(s);
+    }
+  };
+  finishChildYear();
   while (s.age < 12) {
     settleYearEnd(s);
     s.age += 1;
     s.year += 1;
     openYear(s);
-    runYear(s, childFocus(s));
+    drainChild(s);
+    if (s.season == null) {
+      runYear(s, childFocus(s));
+      captureSeasonMemories(s);
+    }
   }
   settleYearEnd(s);
   s.age += 1;
@@ -182,6 +281,7 @@ function arriveAtThirteen(s: GameState): GameState {
 }
 
 function finish(s: GameState, reason: string): GameState {
+  captureSeasonMemories(s);
   s.retiredReason = reason;
   s.phaseInYear = "ending";
   s.card = { kind: "ending", ending: buildEnding(s) };
@@ -244,6 +344,9 @@ function openYear(s: GameState): GameState {
   s.season = null;
   s.summary = null;
   s.flash = null;
+  const medical =
+    (s.investments ?? []).some((i) => i.kind === "medical" && i.untilYear >= s.year) || s.investLeft > 0;
+  if (medical) s.chronic = clamp(s.chronic - 2, 0, 100);
   if (s.investLeft > 0) s.investLeft -= 1;
 
   if (s.sponsor && s.ranking != null && s.ranking > 180 && s.age > 22) {
@@ -260,15 +363,236 @@ function openYear(s: GameState): GameState {
     return finish(s, reason);
   }
 
-  if (s.age <= 12) return childBrief(s);
+  const due = (s.echoes ?? []).filter((e) => e.year <= s.year);
+  s.echoes = (s.echoes ?? []).filter((e) => e.year > s.year);
+  if (due.length) {
+    const line = due.map((e) => e.text).join("");
+    s.yearStory.push(line);
+    s.flash = line;
+  }
 
-  const event = pickEvent(s);
-  if (event) {
+  s.yearQueue = planYear(s);
+  return present(s);
+}
+
+function hasChildFocus(s: GameState): boolean {
+  return s.decisionIds.some((id) => id.startsWith(`child-focus:${s.year}:`));
+}
+
+function parentPick(choices: Choice[]): string {
+  const usable = choices.filter((c) => c.id !== "child:skip" && c.id !== "teen:start" && c.id !== "begin" && c.tone !== "exit");
+  const quiet = usable.find((c) => c.tone === "quiet");
+  return (quiet ?? usable[0] ?? choices[0])!.id;
+}
+
+function consumeLead(s: GameState, card: StoryCard): StoryCard {
+  if (!s.flash) return card;
+  const lead = s.flash;
+  s.flash = null;
+  if (card.body.includes(lead)) return card;
+  return { ...card, body: `${lead}${card.body}` };
+}
+
+function peekCard(s: GameState, head: string): StoryCard | null {
+  if (head.startsWith("gate:")) return gateCard(s, head.slice(5));
+  if (head.startsWith("ev:")) return eventCard(s, head.slice(3));
+  return null;
+}
+
+function choiceLabel(s: GameState, id: string): string {
+  if (s.card.kind !== "story") return id;
+  return s.card.choices.find((c) => c.id === id)?.label ?? id;
+}
+
+function commit(s: GameState, id: string) {
+  const head = s.yearQueue[0] ?? "";
+  if (head.startsWith("ev:")) {
+    const eventId = head.slice(3);
+    if (!s.decisionIds.includes(`seen:${eventId}`)) s.decisionIds.push(`seen:${eventId}`);
+    s.flags[`cd:${eventId}`] = s.year;
+  }
+  const storyBefore = s.yearStory.length;
+  const before = snap(s);
+  if (id.startsWith("ev:")) resolveEvent(s, id);
+  else resolveChoice(s, id);
+  stampChoice(s, id);
+  if (s.yearStory.length === storyBefore) {
+    const line = traceLine(s, id, before);
+    if (line) s.yearStory.push(line);
+  }
+  if (s.yearQueue.length) s.yearQueue.shift();
+}
+
+function present(s: GameState): GameState {
+  while (s.yearQueue.length) {
+    const head = s.yearQueue[0]!;
+    if (head === "train") {
+      s.yearQueue.shift();
+      trainingCard(s);
+      if (s.card.kind === "story") s.card = consumeLead(s, s.card);
+      return s;
+    }
+    if (head === "child") {
+      s.yearQueue.shift();
+      childBrief(s);
+      if (s.card.kind === "story") s.card = consumeLead(s, s.card);
+      return s;
+    }
+    const card = peekCard(s, head);
+    if (!card) {
+      s.yearQueue.shift();
+      continue;
+    }
+    if (head.startsWith("ev:")) {
+      const eventId = head.slice(3);
+      if (!s.decisionIds.includes(`seen:${eventId}`)) s.decisionIds.push(`seen:${eventId}`);
+      s.flags[`cd:${eventId}`] = s.year;
+    }
     s.phaseInYear = "script";
-    s.card = event;
+    s.card = consumeLead(s, card);
     return s;
   }
+  if (s.age <= 12) return childBrief(s);
   return trainingCard(s);
+}
+
+function drainChild(s: GameState) {
+  for (let i = 0; i < 8 && !hasChildFocus(s); i++) {
+    const head = s.yearQueue[0];
+    if (!head || head === "child" || head === "train") {
+      present(s);
+      return;
+    }
+    const card = peekCard(s, head);
+    if (!card?.choices.length) {
+      s.yearQueue.shift();
+      continue;
+    }
+    commit(s, parentPick(card.choices));
+  }
+}
+
+function gateCard(s: GameState, gate: string): StoryCard | null {
+  if (gate === "inj") {
+    const part = s.majorInjuries.at(-1) ?? "身上那處傷";
+    return story(s, "傷還沒好", `${part}還沒好。醫生沒把話說死，教練在等你決定。這種時候回去打，沒有人能保證傷不會變重。`, [
+      { id: "inj:rest", label: "今年先養傷", hint: "這一年比賽會少很多。有時候要空下來，傷才養得回來。", tone: "quiet" },
+      { id: "inj:rush", label: "還是去打", hint: "你知道有風險，還是想站上場。", tone: "risk" },
+    ]);
+  }
+  if (gate === "path18") {
+    const oly = OLYMPICS[s.year];
+    const choices: Choice[] = [
+      { id: "path:college", label: "去讀大學", hint: "四年在校園。暑假要不要出去打，以後再說。" },
+      { id: "path:pro", label: "直接轉職業", hint: "從 ITF 打起。沒有人再幫你排課。", tone: "risk" },
+    ];
+    if (oly) {
+      choices.push({
+        id: "path:pro-oly",
+        label: `轉職業，並去${oly.city}`,
+        hint: "去打奧運的話，那一週就沒辦法拿來賺積分。",
+        tone: "risk",
+      });
+    }
+    const lean = s.flags.collegeInterest
+      ? "之前有美國的大學教練留過你的名字。"
+      : s.flags.proLean
+        ? "你自己說過想直接打職業。"
+        : "";
+    return story(
+      s,
+      "十八歲了",
+      oly
+        ? `${oly.city}奧運在這一年。你也可以不去管它，先去辦大學入學。兩條路都不會等你太久。${lean}`
+        : `高中的比賽快打完了。接下來要嘛去讀大學，要嘛自己買機票出去打。${lean}`,
+      choices,
+    );
+  }
+  if (gate === "grad") {
+    const oly = OLYMPICS[s.year];
+    const choices: Choice[] = [
+      { id: "grad:pro", label: "畢業以後轉職業", hint: "這一年仍是大學生。明年開始算積分。" },
+      { id: "grad:leave", label: "打完就離開", hint: "網球可以留在生活裡，不必留在排名裡。", tone: "exit" },
+    ];
+    if (oly && (s.juniorRank ?? 99) <= 12 || (oly && s.collegeTitles >= 1)) {
+      choices.unshift({
+        id: "grad:oly",
+        label: `先去${oly!.city}，再轉職業`,
+        hint: "畢業那年的奧運。打完，再去辦註冊。",
+      });
+    }
+    return story(s, "校園的最後一年", "學位看你這幾年有沒有把書讀完。要不要打職業，看你還想不想每週換一個城市。", choices);
+  }
+  if (gate === "oly") {
+    const oly = OLYMPICS[s.year];
+    if (!oly) return null;
+    return story(s, `${oly.city}`, "協會打了電話。他們沒有保證你一定能上，只是問你這一年願不願意留一個月給國家隊。", [
+      { id: "oly:yes", label: "去", hint: "奧運場次不多，但每一場都不好打。" },
+      { id: "oly:no", label: "把週數留給積分", hint: "你不是不想代表台灣，只是排名也得顧。", tone: "quiet" },
+    ]);
+  }
+  if (gate === "asian") {
+    const city = ASIAN_GAMES[s.year]?.city;
+    if (!city) return null;
+    return story(s, `${city}亞運`, "亞運不是大滿貫。可是國旗在，家人也看得到轉播。", [
+      { id: "asian:yes", label: "代表出賽", hint: "少打一站積分，多打一週給別人看。" },
+      { id: "asian:no", label: "推辭", hint: "你把這週留給原本的賽程。", tone: "quiet" },
+    ]);
+  }
+  if (gate === "campus") {
+    return story(s, "學期與暑假", "教授認得你，多半是因為你常缺課。隊友認得你，是因為你週一還在練。兩件事一起顧，會很累。", [
+      { id: "campus:study", label: "把學位保住", hint: "比賽少一點。書本多一點。", tone: "quiet" },
+      { id: "campus:summer", label: "暑假去打 ITF", hint: "暑假飛去佛州打，學校的事先放著。" },
+      { id: "campus:both", label: "兩邊都硬撐", hint: "很少人撐得住。你想試試看。", tone: "risk" },
+    ]);
+  }
+  if (gate === "love") {
+    const name = pick(rngFor(s.seed, "partner"), PARTNERS);
+    return story(s, name, "有一個人開始在非比賽的日子出現。他不問你下一站去哪，他問你晚上吃什麼。", [
+      { id: `love:yes:${name}`, label: "在一起", hint: "巡迴的時候，會多一個人要報平安。" },
+      { id: "love:no", label: "先不要", hint: "先專心打球。", tone: "quiet" },
+    ]);
+  }
+  if (gate === "love5") {
+    if (!s.partner) return null;
+    return story(s, s.partner.name, "電話還是打。只是你們開始用排名解釋為什麼這麼累。不一定要分手，但今晚得講清楚。", [
+      { id: "love:stay", label: "繼續", hint: "球不會因此變強，但日子沒那麼空。" },
+      { id: "love:end", label: "分開", hint: "晚上是你自己的，但也比較安靜。", tone: "quiet" },
+    ]);
+  }
+  if (gate === "broke") {
+    const family = s.wealth !== "tight";
+    return story(
+      s,
+      "錢不夠了",
+      family
+        ? "機票、教練、治療，這一年的帳先垮了。家裡問你要不要補上，問得很客氣。"
+        : "這次家裡沒有辦法再補。巡迴賽要一直花錢，這次錢斷了。",
+      family
+        ? [
+            { id: "broke:family", label: "讓家裡補上", hint: "你會記得這筆錢。他們說不用記得。", tone: "quiet" },
+            { id: "retire:money", label: "不打了", hint: "別等到欠錢欠到自己都不想打。", tone: "exit" },
+          ]
+        : [
+            { id: "broke:scrape", label: "縮成最小的賽程，再撐一年", hint: "少飛，少打，看身體和積分還剩什麼。" },
+            { id: "retire:money", label: "停", hint: "到這裡停，也可以。", tone: "exit" },
+          ],
+    );
+  }
+  if (gate === "stay") {
+    return story(
+      s,
+      s.age >= 30 ? "再打一季" : "還要繼續嗎",
+      s.peopleGaveUp
+        ? "電話變少了。沒有人在懲罰你，只是大家去看別人的比賽了。"
+        : "你知道自己已經不是巔峰。你還是可以再打一季。",
+      [
+        { id: "stay:yes", label: s.age >= 30 ? "再打一季" : "再打", hint: "理由可以以後再想。" },
+        { id: "retire:body", label: "就到這裡", hint: "把名字從下週的報名表拿掉。", tone: "exit" },
+      ],
+    );
+  }
+  return null;
 }
 
 function childFocus(s: GameState): Focus {
@@ -340,6 +664,7 @@ function childBrief(s: GameState): GameState {
     play: "爸媽不讓你放學都耗在球場，學校和玩的時間還留著。",
   };
   bits.push(told[focus]);
+  if (s.yearStory.length) bits.push(s.yearStory[s.yearStory.length - 1]!);
   if (s.wealth === "tight") bits.push("家裡的錢就這樣，多的課加不起來。");
   else if (s.wealth === "wealthy" && rng() < 0.5) bits.push("錢不是問題。問題是你肯不肯練。");
 
@@ -360,7 +685,7 @@ function childBrief(s: GameState): GameState {
       {
         id: "child:skip",
         label: "跳到十三歲",
-        hint: "中間照家裡和教練的決定打完，直接看十三歲的排名和狀況。",
+        hint: "中間的選擇走穩的那一邊，直接看十三歲的排名和狀況。",
         tone: "quiet",
       },
     ],
@@ -429,525 +754,6 @@ function story(
   };
 }
 
-function pickEvent(s: GameState): StoryCard | null {
-  if (s.injury === "serious" || s.injury === "moderate") {
-    const part = s.majorInjuries.at(-1) ?? "身上那處傷";
-    return story(
-      s,
-      "傷還沒好",
-      `${part}還沒好。醫生沒把話說死，教練在等你決定。`,
-      [
-        {
-          id: "inj:rest",
-          label: "今年先養傷",
-          hint: "這一年比賽會少很多。有時候要空下來，傷才養得回來。",
-          tone: "quiet",
-        },
-        {
-          id: "inj:rush",
-          label: "還是去打",
-          hint: "你知道有風險，還是想站上場。",
-          tone: "risk",
-        },
-      ],
-    );
-  }
-
-  if (s.age === 11 && !s.decisionIds.includes("first-draw")) {
-    return story(
-      s,
-      "第一張正式籤表",
-      "全國青少年賽的名單上有你的名字。你報了名，名額還沒滿，所以進去了。",
-      [
-        {
-          id: "draw:calm",
-          label: "看完名字，去練球",
-          hint: "你沒有把緊張搞得很大。",
-        },
-        {
-          id: "draw:want",
-          label: "你開始想贏",
-          hint: "一想贏，練法會變，輸的時候也不一樣。",
-          tone: "risk",
-        },
-      ],
-    );
-  }
-
-  if (s.age === 18 && s.path === "undecided") {
-    const oly = OLYMPICS[s.year];
-    const choices: Choice[] = [
-      {
-        id: "path:college",
-        label: "去讀大學",
-        hint: "四年在校園。暑假要不要出去打，以後再說。",
-      },
-      {
-        id: "path:pro",
-        label: "直接轉職業",
-        hint: "從 ITF 打起。沒有人再幫你排課。",
-      },
-    ];
-    if (oly) {
-      choices.push({
-        id: "path:pro-oly",
-        label: `轉職業，並去${oly.city}`,
-        hint: "去打奧運的話，那一週就沒辦法拿來賺積分。",
-      });
-    }
-    return story(
-      s,
-      "十八歲了",
-      oly
-        ? `${oly.city}奧運在這一年。你也可以不去管它，先去辦大學入學。兩條路都不會等你太久。`
-        : "高中的比賽快打完了。接下來要嘛去讀大學，要嘛自己買機票出去打。",
-      choices,
-    );
-  }
-
-  if (s.age === 22 && s.path === "college" && !s.decisionIds.includes("college-exit")) {
-    const oly = OLYMPICS[s.year];
-    const choices: Choice[] = [
-      {
-        id: "grad:pro",
-        label: "畢業以後轉職業",
-        hint: "這一年仍是大學生。明年開始算積分。",
-      },
-      {
-        id: "grad:leave",
-        label: "打完就離開",
-        hint: "網球可以留在生活裡，不必留在排名裡。",
-        tone: "exit",
-      },
-    ];
-    if (oly && olyEligible(s)) {
-      choices.unshift({
-        id: "grad:oly",
-        label: `先去${oly.city}，再轉職業`,
-        hint: "畢業那年的奧運。打完，再去辦註冊。",
-      });
-    }
-    return story(
-      s,
-      "校園的最後一年",
-      "學位看你這幾年有沒有把書讀完。要不要打職業，看你還想不想每週換一個城市。",
-      choices,
-    );
-  }
-
-  if (olyEligible(s)) {
-    const oly = OLYMPICS[s.year]!;
-    return story(
-      s,
-      `${oly.city}`,
-      "協會打了電話。他們沒有保證你一定能上，只是問你這一年願不願意留一個月給國家隊。",
-      [
-        {
-          id: "oly:yes",
-          label: "去",
-          hint: "奧運場次不多，但每一場都不好打。",
-        },
-        {
-          id: "oly:no",
-          label: "把週數留給積分",
-          hint: "你不是不想代表台灣，只是排名也得顧。",
-          tone: "quiet",
-        },
-      ],
-    );
-  }
-
-  if (s.coach.youth && s.age >= 17 && yearsSince(s, "coachpick:") >= 3) {
-    const offer = coachOffer(s);
-    if (offer) return offer;
-  }
-
-  if (s.path === "college" && (s.age === 19 || s.age === 21)) {
-    return story(
-      s,
-      "學期與暑假",
-      "教授認得你，多半是因為你常缺課。隊友認得你，是因為你週一還在練。兩件事一起顧，會很累。",
-      [
-        {
-          id: "campus:study",
-          label: "把學位保住",
-          hint: "比賽少一點。書本多一點。",
-          tone: "quiet",
-        },
-        {
-          id: "campus:summer",
-          label: "暑假去打 ITF",
-          hint: "暑假飛去佛州打，學校的事先放著。",
-        },
-        {
-          id: "campus:both",
-          label: "兩邊都硬撐",
-          hint: "很少人撐得住。你想試試看。",
-          tone: "risk",
-        },
-      ],
-    );
-  }
-
-  if (asianEligible(s)) {
-    const city = ASIAN_GAMES[s.year]!.city;
-    return story(
-      s,
-      `${city}亞運`,
-      "亞運不是大滿貫。可是國旗在，家人也看得到轉播。",
-      [
-        {
-          id: "asian:yes",
-          label: "代表出賽",
-          hint: "少打一站積分，多打一週給別人看。",
-        },
-        {
-          id: "asian:no",
-          label: "推辭",
-          hint: "你把這週留給原本的賽程。",
-          tone: "quiet",
-        },
-      ],
-    );
-  }
-
-  if (s.age === 15 && !s.overseas && !s.scoutIgnored) {
-    const scholarship = s.hidden.luck >= 62 || s.hidden.talent >= 80;
-    if (s.wealth !== "tight" || scholarship) {
-      return story(
-        s,
-        "有人看了你打球",
-        scholarship && s.wealth === "tight"
-          ? "一間海外訓練營願意給你名額。家裡不用再掏一筆。你要離開原來的教練一段時間。"
-          : "有人建議你去海外練一個週期。錢付得起，人要自己去。",
-        [
-          {
-            id: "sea:yes",
-            label: "去",
-            hint: "練習的環境會好一點，家會比較遠。",
-          },
-          {
-            id: "sea:no",
-            label: "留在這裡",
-            hint: "你認得這裡的球場，也知道怎麼回家。",
-            tone: "quiet",
-          },
-        ],
-      );
-    }
-  }
-
-  if (
-    s.age === 16 &&
-    s.path === "undecided" &&
-    !s.decisionIds.includes("asked-early") &&
-    (s.juniorRank == null || s.juniorRank <= 80)
-  ) {
-    return story(
-      s,
-      "台南有一站 ITF",
-      "你還是青少年，但已經可以去看成人賽的籤表了。教練說可以去試試，也可以再等。",
-      [
-        {
-          id: "early:yes",
-          label: "去打成人組",
-          hint: "輸給大人不丟臉，但會知道自己差在哪。",
-        },
-        {
-          id: "early:no",
-          label: "再打一年青少年",
-          hint: "你還不想這麼早被大人教訓。",
-          tone: "quiet",
-        },
-      ],
-    );
-  }
-
-  const sponsor = sponsorOffer(s);
-  if (sponsor) return sponsor;
-
-  if (s.age >= 12 && s.age % 4 === 0 && yearsSince(s, "coachpick:") >= 4) {
-    const offer = coachOffer(s);
-    if (offer) return offer;
-  }
-
-  if (!s.partner && s.age === 24 && s.path === "pro" && !s.decisionIds.includes("love:asked")) {
-    const name = pick(rngFor(s.seed, "partner"), PARTNERS);
-    return story(
-      s,
-      name,
-      "有一個人開始在非比賽的日子出現。他不問你下一站去哪，他問你晚上吃什麼。",
-      [
-        {
-          id: `love:yes:${name}`,
-          label: "在一起",
-          hint: "巡迴的時候，會多一個人要報平安。",
-        },
-        {
-          id: "love:no",
-          label: "先不要",
-          hint: "先專心打球。",
-          tone: "quiet",
-        },
-      ],
-    );
-  }
-
-  if (
-    s.partner &&
-    s.age === s.partner.sinceYear + 5 &&
-    !s.decisionIds.includes("love:later")
-  ) {
-    return story(
-      s,
-      s.partner.name,
-      "電話還是打。只是你們開始用排名解釋為什麼這麼累。不一定要分手，但今晚得講清楚。",
-      [
-        {
-          id: "love:stay",
-          label: "繼續",
-          hint: "球不會因此變強，但日子沒那麼空。",
-        },
-        {
-          id: "love:end",
-          label: "分開",
-          hint: "晚上是你自己的，但也比較安靜。",
-          tone: "quiet",
-        },
-      ],
-    );
-  }
-
-  if (
-    s.path === "pro" &&
-    !s.wildcardUsed &&
-    s.ranking != null &&
-    s.ranking > 70 &&
-    s.ranking < 220 &&
-    s.age >= 20 &&
-    s.age <= 30 &&
-    !s.decisionIds.includes(`wc-ask:${s.year}`)
-  ) {
-    return story(
-      s,
-      "一張外卡",
-      "有一站 ATP 二百五願意給你外卡，讓你進會外賽。不是你排名夠了，是剛好有一個空位。",
-      [
-        {
-          id: "wc:yes",
-          label: "接",
-          hint: "輸了也是輸在更大的球場。",
-        },
-        {
-          id: "wc:no",
-          label: "不去",
-          hint: "你不想用一張人情換一場可能的首輪。",
-          tone: "quiet",
-        },
-      ],
-    );
-  }
-
-  if (
-    s.path === "pro" &&
-    s.age >= 21 &&
-    s.money > 120_000 &&
-    s.investLeft === 0 &&
-    yearsSince(s, "bodybuy:") >= 6
-  ) {
-    return story(
-      s,
-      "一筆可以花的錢",
-      "有人建議你把一季的獎金換成復健團隊，而不是換成另一雙鞋。",
-      [
-        {
-          id: "body:yes",
-          label: "把錢花在身體上",
-          hint: `大約 ${money(25000)}。舊傷會好管一點。`,
-        },
-        {
-          id: "body:no",
-          label: "留著",
-          hint: "錢在，心裡比較穩。",
-          tone: "quiet",
-        },
-      ],
-    );
-  }
-
-  if (s.path === "pro" && s.age > 23 && s.money < -8_000 && yearsSince(s, "broke:") >= 3) {
-    const family = s.wealth !== "tight";
-    return story(
-      s,
-      "錢不夠了",
-      family
-        ? "機票、教練、治療，這一年的帳先垮了。家裡問你要不要補上，問得很客氣。"
-        : "這次家裡沒有辦法再補。巡迴賽要一直花錢，這次錢斷了。",
-      family
-        ? [
-            {
-              id: "broke:family",
-              label: "讓家裡補上",
-              hint: "你會記得這筆錢。他們說不用記得。",
-              tone: "quiet",
-            },
-            {
-              id: "retire:money",
-              label: "不打了",
-              hint: "別等到欠錢欠到自己都不想打。",
-              tone: "exit",
-            },
-          ]
-        : [
-            {
-              id: "broke:scrape",
-              label: "縮成最小的賽程，再撐一年",
-              hint: "少飛，少打，看身體和積分還剩什麼。",
-            },
-            {
-              id: "retire:money",
-              label: "停",
-              hint: "到這裡停，也可以。",
-              tone: "exit",
-            },
-          ],
-    );
-  }
-
-  if (
-    (s.age >= 33 || s.peopleGaveUp || s.motivation < 34) &&
-    yearsSince(s, "stayask:") >= 3 &&
-    s.path === "pro"
-  ) {
-    return story(
-      s,
-      "還要繼續嗎",
-      s.peopleGaveUp
-        ? "電話變少了。沒有人在懲罰你，只是大家去看別人的比賽了。"
-        : "你還贏得到球。你開始會在賽前問自己，這週的意義是什麼。",
-      [
-        {
-          id: "stay:yes",
-          label: "再打",
-          hint: "理由可以以後再想。",
-        },
-        {
-          id: "retire:body",
-          label: "結束",
-          hint: "把名字從下週的報名表拿掉。",
-          tone: "exit",
-        },
-      ],
-    );
-  }
-
-  return null;
-}
-
-function olyEligible(s: GameState): boolean {
-  if (!OLYMPICS[s.year]) return false;
-  if (s.age < 18) return false;
-  if (s.decisionIds.includes(`oly:${s.year}`) || s.decisionIds.includes(`oly-no:${s.year}`)) {
-    return false;
-  }
-  if (s.path === "college") return (s.juniorRank ?? 99) <= 12 || s.collegeTitles >= 1;
-  if (s.path !== "pro") return false;
-  return s.ranking != null && s.ranking <= 140;
-}
-
-function asianEligible(s: GameState): boolean {
-  if (!ASIAN_GAMES[s.year]) return false;
-  if (s.age < 16 || s.age > 36) return false;
-  if (s.decisionIds.includes(`asian:${s.year}`) || s.decisionIds.includes(`asian-no:${s.year}`)) {
-    return false;
-  }
-  if (s.age < 18) return (s.juniorRank ?? 500) <= 50;
-  if (s.path === "college") return true;
-  return s.path === "pro" && s.ranking != null && s.ranking <= 280;
-}
-
-function canHire(s: GameState, c: Coach): boolean {
-  if (c.minAge > s.age) return false;
-  if (c.id === s.coach.id) return false;
-  const ranked = s.ranking != null && s.ranking <= 40;
-  if (c.gate === "overseas") {
-    return s.overseas || s.wealth === "wealthy" || (s.ranking != null && s.ranking <= 25);
-  }
-  if (c.gate === "money") {
-    return s.wealth === "wealthy" || s.wealth === "comfortable" || ranked || s.money > c.cost * 2;
-  }
-  if (s.wealth === "tight" && c.cost > 12_000 && s.money < c.cost) return false;
-  return true;
-}
-
-function coachOffer(s: GameState): StoryCard | null {
-  const pool = COACHES.filter((c) => canHire(s, c))
-    .sort((a, b) => b.quality - a.quality)
-    .slice(0, 2);
-  if (!pool.length) return null;
-  const choices: Choice[] = [
-    {
-      id: "coach:stay",
-      label: `留下${s.coach.name}`,
-      hint: s.coach.line,
-      tone: "quiet",
-    },
-    ...pool.map((c) => ({
-      id: `coach:${c.id}`,
-      label: c.name,
-      hint: `${c.archetype}。『${c.line}』`,
-    })),
-  ];
-  return story(
-    s,
-    "教練這件事",
-    `${s.coach.name}帶你到這裡。有人建議你換。換不換，今年就要講清楚。`,
-    choices,
-  );
-}
-
-function sponsorOffer(s: GameState): StoryCard | null {
-  if (s.path !== "pro" || s.age < 18 || s.ranking == null || s.ranking > 130) return null;
-  if (yearsSince(s, "sponsor-no:") < 2) return null;
-  const annual = annualFor(s.ranking);
-  if (s.sponsor && s.sponsor.annual >= annual * 0.85) return null;
-  const brand = pick(rngFor(s.seed, `brand:${s.year}:${s.ranking}`), brandsFor(s.ranking));
-  return story(
-    s,
-    brand,
-    s.sponsor
-      ? `${s.sponsor.brand}的合約還在。${brand}開了新的數字，一年 ${money(annual)}。他們要你戴他們的帽子，也要用一部分你的照片。`
-      : `${brand}願意付你一年 ${money(annual)}。條件很普通：帽子、拍框，還有你得留在排名上。`,
-    [
-      {
-        id: `sponsor:yes:${brand}:${annual}`,
-        label: "簽約",
-        hint: "錢會先入帳，名字也會先印在別人的型錄上。",
-      },
-      {
-        id: "sponsor:no",
-        label: "先不簽",
-        hint: "想再等更好的條件，或沒那麼吵的牌子。",
-        tone: "quiet",
-      },
-    ],
-  );
-}
-
-function brandsFor(rank: number): string[] {
-  if (rank <= 15) return ["Wilson", "Yonex", "Babolat"];
-  if (rank <= 50) return ["HEAD", "Babolat", "VICTOR"];
-  return ["VICTOR", "Prince", "Dunlop"];
-}
-
-function annualFor(rank: number): number {
-  if (rank <= 5) return 2_200_000;
-  if (rank <= 15) return 800_000;
-  if (rank <= 40) return 260_000;
-  if (rank <= 80) return 80_000;
-  return 22_000;
-}
-
 function resolveChoice(s: GameState, id: string) {
   if (id === "inj:rest") {
     s.missedHalf = true;
@@ -978,6 +784,7 @@ function resolveChoice(s: GameState, id: string) {
   }
   if (id === "path:college") {
     s.path = "college";
+    s.flags.collegeInterest = s.flags.collegeInterest || s.year;
     mark(s, "path:college", `${s.year}，你去讀大學。`);
     s.yearStory.push("你去辦了入學，沒有辦職業註冊。");
     return;
@@ -987,6 +794,7 @@ function resolveChoice(s: GameState, id: string) {
     mark(s, id, `${s.year}，你轉入職業。`);
     s.yearStory.push("從這一年起，比賽開始用錢和積分算。");
     if (id === "path:pro-oly") s.decisionIds.push(`oly:${s.year}`);
+    s.flags.proLean = s.flags.proLean || s.year;
     return;
   }
   if (id === "grad:pro" || id === "grad:oly" || id === "grad:leave") {
@@ -1025,6 +833,9 @@ function resolveChoice(s: GameState, id: string) {
       s.yearStory.push("你去了一段時間的海外訓練。");
     }
     mark(s, "sea:yes", `${s.year}，你接受海外訓練。`);
+    s.flags.overseasNetwork = s.flags.overseasNetwork || s.year;
+    s.flags.internationalExperience = s.year;
+    s.echoes.push({ year: s.year + 3, text: "當初看你打球的那個人，這年又傳了訊息。" });
     return;
   }
   if (id === "sea:no") {
@@ -1073,6 +884,15 @@ function resolveChoice(s: GameState, id: string) {
     s.coachNote = `${next.archetype}。`;
     mark(s, `coachpick:${s.year}`, `${s.year}，教練換成${next.name}。`);
     s.yearStory.push(`${next.name}開始帶你。`);
+    const score = s.hidden.learning * 0.45 + s.hidden.luck * 0.25 + s.motivation * 0.3;
+    const roll = rngFor(s.seed, `coach-fit:${s.year}:${next.id}`)() * 100;
+    if (roll > score + 28) {
+      s.motivation = clamp(s.motivation - 6, 0, 100);
+      s.flags.coachConflict = s.year;
+      s.yearStory.push("前幾個月對不上。他的練法你還沒吃進去。");
+    } else {
+      s.yearStory.push("一開始怪怪的，後來開始對上。");
+    }
     return;
   }
   if (id.startsWith("sponsor:yes:")) {
@@ -1080,6 +900,7 @@ function resolveChoice(s: GameState, id: string) {
     const annual = Number(annualRaw);
     s.sponsor = { brand: brand || "贊助", annual: Number.isFinite(annual) ? annual : 20_000, sinceYear: s.year };
     s.fame = clamp(s.fame + 4, 0, 100);
+    s.flags.sponsorTrust = (s.flags.sponsorTrust ?? 0) + 1;
     mark(s, `sponsor-yes:${s.year}`, `${s.year}，你和${s.sponsor.brand}簽約。`);
     s.yearStory.push(`${s.sponsor.brand}的帽子開始出現在你頭上。`);
     return;
@@ -1127,6 +948,8 @@ function resolveChoice(s: GameState, id: string) {
   if (id === "body:yes") {
     s.money -= 25_000;
     s.investLeft = 3;
+    s.investments.push({ kind: "medical", untilYear: s.year + 3 });
+    s.flags.injuryPrevention = s.year;
     s.chronic = clamp(s.chronic - 12, 0, 100);
     mark(s, `bodybuy:${s.year}`, `${s.year}，你把錢花在復健團隊上。`);
     s.yearStory.push("有人開始幫你顧膝蓋和睡眠。");
@@ -1173,6 +996,9 @@ function trainingTitle(s: GameState): string {
 }
 
 function trainingBody(s: GameState): string {
+  if (s.decisionIds.includes(`quiet:${s.year}`)) {
+    return `這一年沒有什麼特別的事。你照常訓練、比賽，偶爾回家吃飯。${s.coach.name}還是那句：「${s.coach.line}」`;
+  }
   const height = currentHeight(s.adultHeight, s.age);
   const bits = [
     `${s.coach.name}還是那個${s.coach.archetype}。他還是那句：「${s.coach.line}」`,
@@ -1201,12 +1027,12 @@ function focusChoices(s: GameState): Choice[] {
   const phys: Choice = {
     id: "train:phys",
     label: "練身體",
-    hint: "跑、重量、再跑。球感會慢一點。",
+    hint: "跑步、重量訓練，再跑。球感的訓練會慢一點。",
   };
   const mental: Choice = {
     id: "train:mental",
     label: "練關鍵分",
-    hint: "練落後、平分，還有觀眾。技術今年幾乎不動。",
+    hint: "練習落後、平分時怎麼打，也練習面對觀眾壓力。技術今年幾乎不變。",
   };
   const intense: Choice = {
     id: "train:intense",
@@ -1253,14 +1079,15 @@ function runYear(s: GameState, focus: Focus): GameState {
 
 function noteRank(s: GameState) {
   if (s.ranking === 1) s.coachNote = "世界第一了。他還是不太愛說話。";
-  else if (s.ranking != null && s.ranking <= 10) s.coachNote = "種子區看得到他了。";
-  else if (s.firstTop100Age === s.age) s.coachNote = "前一百。從現在起，每一場都會被算進去。";
+  else if (s.ranking != null && s.ranking <= 10) s.coachNote = "他開始進入種子行列了。";
+  else if (s.firstTop100Age === s.age) s.coachNote = "你進前一百了。從現在開始，每一場比賽都會影響排名。";
   else if (s.peakRank != null && s.peakRank <= 100 && s.age > 24 && (s.ranking == null || s.ranking > 140)) {
-    s.coachNote = "他以前排名在前面。現在慢慢掉下來了。";
+    s.coachNote = "他以前排名很高，現在慢慢掉下來了。";
   }
 }
 
 function showSummary(s: GameState): GameState {
+  captureSeasonMemories(s);
   const summary = makeSummary(s);
   s.summary = summary;
   s.phaseInYear = "summary";
@@ -1299,7 +1126,13 @@ function makeSummary(s: GameState): Summary {
     .slice(0, 3)
     .map((x) => `${STAT_LABEL[x.k]} ${x.d > 0 ? "+" : ""}${x.d}`);
 
-  const story = s.yearStory.join("") || (s.age < 11 ? "這一年主要是長高。" : "這一年沒有特別的事。");
+  const storyBits = [s.yearStory.join("") || (s.age < 11 ? "這一年主要是長高。" : "這一年沒有特別的事。")];
+  for (const mem of s.memories ?? []) {
+    if (mem.year === s.year && mem.id !== "firstCoach" && !storyBits[0]!.includes(mem.text.slice(0, 8))) {
+      storyBits.push(mem.text);
+    }
+  }
+  const story = storyBits.join("");
 
   return {
     year: s.year,
@@ -1320,9 +1153,9 @@ function makeSummary(s: GameState): Summary {
 function nextLine(s: GameState): string {
   if (s.decisionIds.includes("pending:leave")) return "再過一年，就要離開了。";
   if (s.ranking === 1) return "世界第一不好守，守起來比拿到的時候更累。";
-  if (s.ranking != null && s.ranking <= 10) return "種子名單上會開始看到你。";
+  if (s.ranking != null && s.ranking <= 10) return "你開始會出現在種子名單裡。";
   if (s.injury === "serious" || s.injury === "moderate") return "明年要先問身體。";
-  if (s.path === "college" && s.age < 22) return "校園的比賽還會再來。";
+  if (s.path === "college" && s.age < 22) return "大學的比賽還有機會再打。";
   if (s.age < 12) return "你還在長。明年怎麼練，還是家裡和教練說了算。";
   if (s.age === 12) return "明年十三歲，開始輪到你自己選。";
   if (s.peopleGaveUp) return "不會再有人主動打電話來。";

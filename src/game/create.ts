@@ -2,8 +2,37 @@ import { COACHES, coachById } from "./coaches";
 import { clamp, gaussian, pick, rngFor, weighted } from "./rng";
 import type { Coach, GameState, Hidden, Stats, Wealth } from "./types";
 
-const SURNAMES = ["陳", "林", "黃", "張", "吳", "周", "許", "蔡", "鄭", "王", "劉", "楊"];
-const GIVEN = ["柏宇", "子恆", "紹齊", "承恩", "奕辰", "品睿", "家維", "承翰", "宇翔", "宜謙", "廷恩", "宥辰"];
+const SURNAMES = [
+  "陳", "林", "黃", "張", "李", "王",
+  "吳", "劉", "蔡", "楊", "許", "鄭",
+  "謝", "洪", "郭", "邱", "曾", "廖",
+  "賴", "徐", "周", "葉", "蘇", "莊",
+  "呂", "江", "何", "羅", "高", "蕭",
+  "潘", "朱", "鍾", "游", "詹", "胡",
+  "施", "沈", "余", "杜", "范", "彭",
+];
+
+const GIVEN = [
+  "柏宇", "子恆", "紹齊", "承恩", "奕辰", "品睿",
+  "家維", "承翰", "宇翔", "宜謙", "廷恩", "宥辰",
+  "冠廷", "俊宏", "俊傑", "志豪", "建宏", "建霖",
+  "昱廷", "昱翔", "冠宇", "冠霖", "冠佑", "俊賢",
+  "俊豪", "偉倫", "偉傑", "宗翰", "宗憲", "哲宇",
+  "哲維", "彥廷", "彥均", "彥宏", "彥儒", "彥翔",
+  "柏翰", "柏勳", "柏霖", "浩然", "浩宇", "浩翔",
+  "浩廷", "宇辰", "宇謙", "宇軒", "宇威", "宇凡",
+  "家豪", "家銘", "家翔", "家榮", "家睿", "家瑋",
+  "承哲", "承佑", "承霖", "承澤", "承峰",
+  "志偉", "志明", "志宏", "俊安", "俊廷", "俊佑",
+  "冠翔", "冠勳", "冠豪", "冠傑",
+  "明哲", "明軒", "明翰", "信宏", "宗佑", "宗霖",
+  "偉翔", "偉哲", "彥勳", "彥博",
+  "凱翔", "凱文", "凱傑", "瑞廷", "瑞恩", "瑞哲",
+  "育誠", "育豪", "品豪", "柏均", "柏辰",
+  "文彬", "文傑", "國豪", "世傑", "世偉",
+  "威廷", "子豪", "子謙", "柏宏", "宜霖",
+  "廷宇", "廷瑋", "建志", "建民", "俊銘",
+];
 
 export function randomSeed(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -68,19 +97,19 @@ function backstory(input: {
       ? "你的手感不錯，球一碰拍就大概知道會去哪。"
       : hidden.ballFeel < 42
         ? "你一開始打得很醜。沒有人因此答應你什麼，也沒有人急著把你送走。"
-        : "你會碰球。六歲的會，也就只是會碰球。";
+        : "你會碰球。六歲的孩子會打到球，就已經算不錯了。";
   const luck =
     hidden.luck >= 74
       ? "有一次球飛出圍網，被路過的人撿起來。你們因此認識。"
       : hidden.luck <= 30
         ? "第一個教練的名額滿了。你晚了兩天。"
-        : "沒有人在那個夏天對你的未來打包票。";
+        : "那個夏天，沒有人敢說你以後會走到哪裡。";
   return [
     moneyLine,
     body,
     feel,
     luck,
-    `帶你的人是${coach.name}，${coach.archetype}。他常說：「${coach.line}」`,
+    `你的第一位教練是${coach.name}，${coach.archetype}。他常說：「${coach.line}」`,
     "現在是一九九二年。你六歲。十二歲以前，怎麼練是爸媽和教練決定的。沒有人知道你會變成誰。",
   ].join("");
 }
@@ -220,6 +249,12 @@ export function createLife(name: string, seed: string): GameState {
     metLegends: [],
     lastJunior: { nat: null, asia: null },
     bigTour: false,
+    flags: {},
+    rivals: [],
+    investments: [],
+    echoes: [],
+    yearQueue: [],
+    memories: [{ id: "firstCoach", year: 1992, age: 6, text: `第一個教練是${coach.name}。` }],
   };
   return state;
 }

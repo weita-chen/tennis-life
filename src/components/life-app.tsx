@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { wealthLabel } from "@/game/coaches";
 import { randomName, randomSeed } from "@/game/create";
 import {
@@ -12,10 +12,21 @@ import {
   rankLabel,
   stageLabel,
 } from "@/game/format";
-import { act, choicesFor, injuryWord, moodWord, startLife } from "@/game/year";
+import { act, choicesFor, hydrate, injuryWord, moodWord, startLife } from "@/game/year";
 import type { Choice, GameState, StatKey } from "@/game/types";
 
 const KEY = "tennis-life.v1";
+const THEME_KEY = "tennis-life.theme";
+
+const THEMES = [
+  { id: "rg", label: "法網", court: "#bb5522", accent: "#02503b", ink: "#ffffff", onAccent: "#ffffff", dot: "#02503b" },
+  { id: "us", label: "美網", court: "#0B1F8F", accent: "#FFD400", ink: "#ffffff", onAccent: "#0B1F8F", dot: "#FFD400" },
+  { id: "wb", label: "溫網", court: "#046A38", accent: "#582C83", ink: "#ffffff", onAccent: "#ffffff", dot: "#582C83" },
+  { id: "ao", label: "澳網", court: "#1E8FD5", accent: "#E1FF00", ink: "#ffffff", onAccent: "#10240a", dot: "#E1FF00" },
+  { id: "night", label: "夜法", court: "#002957", accent: "#bb5522", ink: "#E0CD95", onAccent: "#ffffff", dot: "#bb5522" },
+] as const;
+
+type ThemeId = (typeof THEMES)[number]["id"];
 
 function loadLife(): GameState | null {
   try {
@@ -23,7 +34,7 @@ function loadLife(): GameState | null {
     if (!raw) return null;
     const data = JSON.parse(raw) as GameState;
     if (!data?.seed || !data.card || !data.name) return null;
-    return data;
+    return hydrate(data);
   } catch {
     return null;
   }
@@ -56,11 +67,21 @@ export function LifeApp() {
   const [name, setName] = useState("");
   const [seed, setSeed] = useState("");
   const [armReset, setArmReset] = useState(false);
+  const [theme, setTheme] = useState<ThemeId>("rg");
+  const slam = THEMES.find((item) => item.id === theme) ?? THEMES[0];
 
   useEffect(() => {
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    if (THEMES.some((item) => item.id === savedTheme)) setTheme(savedTheme as ThemeId);
     const saved = loadLife();
     if (saved) setState(saved);
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.slam = theme;
+    localStorage.setItem(THEME_KEY, theme);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", slam.court);
+  }, [theme, slam.court]);
 
   function begin(nextSeed?: string) {
     const life = startLife(name, nextSeed ?? seed);
@@ -98,64 +119,74 @@ export function LifeApp() {
 
   if (!state) {
     return (
-      <Shell>
-        <Masthead />
-        <div className="mt-8 max-w-xl">
-          {sentences(
-            "你六歲，住在台灣。十二歲以前，怎麼練是爸媽和教練決定的，每個人家裡不一樣。十三歲起，才輪到你自己選。",
-          ).map((line) => (
-            <p key={line} className="mt-3 text-lg leading-relaxed">
-              {line}
-            </p>
-          ))}
-        </div>
-        <form
-          className="mt-10 max-w-md"
-          onSubmit={(e) => {
-            e.preventDefault();
-            begin();
-          }}
-        >
-          <label className="block text-sm text-muted" htmlFor="player-name">
-            名字
-          </label>
-          <input
-            id="player-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="可以留白，會給你一個"
-            maxLength={12}
-            className="mt-2 w-full border-b border-line bg-transparent py-3 text-lg outline-none placeholder:text-muted"
-          />
-          <label className="mt-6 block text-sm text-muted" htmlFor="player-seed">
-            種子
-          </label>
-          <input
-            id="player-seed"
-            value={seed}
-            onChange={(e) => setSeed(e.target.value.toUpperCase())}
-            placeholder="留白就隨機。同一個種子，同一條路"
-            maxLength={12}
-            className="mt-2 w-full border-b border-line bg-transparent py-3 font-display text-lg tracking-widest outline-none placeholder:font-serif placeholder:tracking-normal placeholder:text-muted"
-          />
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <button type="submit" className="min-h-11 bg-court px-5 py-3 text-cream">
-              開始這一生
-            </button>
-            <button
-              type="button"
-              className="min-h-11 border border-line px-5 py-3"
-              onClick={() => setName(randomName(randomSeed(), name.trim()))}
+      <section
+        className="gate"
+        data-theme={slam.id}
+        style={{
+          ["--slam-court" as string]: slam.court,
+          ["--slam-accent" as string]: slam.accent,
+          ["--slam-ink" as string]: slam.ink,
+          ["--slam-on-accent" as string]: slam.onAccent,
+        }}
+      >
+        <div className="gate-felt" aria-hidden="true" />
+        <div className="gate-inner">
+          <header className="gate-top">
+            <p className="scoreboard">1992 · 臺灣</p>
+            <div className="theme-bar" role="toolbar" aria-label="大滿貫配色">
+              <ThemeBar theme={slam.id} onPick={setTheme} />
+            </div>
+          </header>
+          <div className="gate-main">
+            <h1 className="gate-title">《網球物語》</h1>
+            <div className="gate-story">
+              <p>西元 1992 年，臺灣。你第一次握住比手臂還重的網球拍，年僅 6 歲。</p>
+              <p>12 歲之前，你的訓練表由父母與教練主宰。有人在豪門俱樂部打砸黃金，有人在破舊紅土場揮汗如雨。</p>
+              <p>13 歲開始，握拍的手由你掌控。你要走上底線重砲防守，還是上網強勢壓迫？</p>
+            </div>
+            <form
+              className="gate-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                begin();
+              }}
             >
-              {name.trim() ? "換一個名字" : "給我一個名字"}
-            </button>
+              <label className="gate-label" htmlFor="player-name">
+                球員姓名
+              </label>
+              <input
+                id="player-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="留白會隨機骰一個名字"
+                maxLength={12}
+                className="gate-input"
+              />
+              <label className="gate-label" htmlFor="player-seed">
+                命運種子
+              </label>
+              <input
+                id="player-seed"
+                value={seed}
+                onChange={(e) => setSeed(e.target.value.toUpperCase())}
+                placeholder="也可以交給老天"
+                maxLength={12}
+                className="gate-input"
+                autoCapitalize="characters"
+              />
+              <div className="gate-actions">
+                <button type="submit" className="gate-go">
+                  踏上球場 (Start Career)
+                </button>
+                <button type="button" className="gate-ghost" onClick={() => setName(randomName(randomSeed(), name.trim()))}>
+                  骰出姓名 (Random Name)
+                </button>
+              </div>
+            </form>
           </div>
-          {name.trim() ? (
-            <p className="mt-3 text-sm text-muted">不喜歡就再按，換到你喜歡為止。</p>
-          ) : null}
-        </form>
-        <p className="mt-10 text-sm text-muted">你選的名字和種子會留著。天賦要打了才知道。</p>
-      </Shell>
+          <p className="gate-foot">「實力可以苦練，但天賦……只有站上賽場才知道！」</p>
+        </div>
+      </section>
     );
   }
 
@@ -163,13 +194,19 @@ export function LifeApp() {
   const hurt = injuryWord(state);
 
   return (
-    <div className="min-h-dvh bg-paper text-ink">
-      <div className="mx-auto grid max-w-6xl md:grid-cols-[18rem_minmax(0,1fr)]">
+    <div className="life-shell min-h-dvh bg-paper text-ink">
+      <div className="gate-felt" aria-hidden="true" />
+      <div className="life-top">
+        <div className="theme-bar" role="toolbar" aria-label="大滿貫配色">
+          <ThemeBar theme={slam.id} onPick={setTheme} />
+        </div>
+      </div>
+      <div className="life-grid mx-auto grid max-w-6xl md:grid-cols-[18rem_minmax(0,1fr)]">
         <aside className="order-2 border-line bg-court text-cream md:order-1 md:min-h-dvh md:border-r">
           <div className="px-5 py-6 md:sticky md:top-0 md:px-6 md:py-8">
             <div className="flex items-center gap-3">
               <img src="/favicon.svg" alt="" width={28} height={28} />
-              <p className="text-sm tracking-widest text-ball">網球人生</p>
+              <p className="text-sm tracking-widest text-ball">網球物語</p>
             </div>
             <h1 className="mt-4 font-display text-4xl leading-none">{state.name}</h1>
             <p className="mt-3 text-sm text-ball">
@@ -184,11 +221,24 @@ export function LifeApp() {
               <Row k="存款" v={money(state.money)} />
               {state.sponsor ? <Row k="贊助" v={state.sponsor.brand} /> : null}
               {state.partner ? <Row k="對象" v={state.partner.name} /> : null}
+              {state.rivals?.[0] ? <Row k="對手" v={state.rivals[0].name} /> : null}
               <Row k="勝－敗" v={`${state.wins}–${state.losses}`} />
             </dl>
+            {state.memories?.length ? (
+              <details className="mt-6">
+                <summary className="text-sm text-ball">還記得</summary>
+                <ul className="mt-3 space-y-2 text-sm">
+                  {state.memories.map((m) => (
+                    <li key={m.id}>
+                      {m.age} 歲 · {m.text}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
             {state.titles.gs + state.titles.m1000 + state.titles.atp > 0 ? (
               <p className="mt-4 text-sm text-ball">
-                大滿貫 {state.titles.gs} · ATP 1000 {state.titles.m1000} · ATP {state.titles.atp}
+                大滿貫 {state.titles.gs} · 大師賽 {state.titles.m1000} · ATP {state.titles.atp}
               </p>
             ) : null}
             <details className="mt-6">
@@ -217,7 +267,10 @@ export function LifeApp() {
             <p className="text-xl">{state.name}</p>
             <p className="text-sm text-muted">{rankLabel(state)}</p>
           </div>
-          <article key={`${state.year}-${state.age}-${state.phaseInYear}-${state.card.kind}`} className="card-in max-w-2xl">
+          <article
+            key={`${state.year}-${state.age}-${state.phaseInYear}-${state.card.kind}-${state.card.kind === "story" ? state.card.title : ""}-${state.card.kind === "story" ? (state.card.receipt?.choice ?? "") : ""}`}
+            className="card-in max-w-2xl"
+          >
             {state.card.kind === "story" ? <StoryBody card={state.card} /> : null}
             {state.card.kind === "season" ? <SeasonBody state={state} /> : null}
             {state.card.kind === "summary" ? <SummaryBody state={state} /> : null}
@@ -240,23 +293,22 @@ export function LifeApp() {
   );
 }
 
-function Shell({ children }: { children: ReactNode }) {
+function ThemeBar({ theme, onPick }: { theme: ThemeId; onPick: (id: ThemeId) => void }) {
   return (
-    <main className="min-h-dvh bg-paper px-5 py-10 text-ink md:px-16 md:py-16">
-      <div className="mx-auto max-w-3xl">{children}</div>
-    </main>
-  );
-}
-
-function Masthead() {
-  return (
-    <header>
-      <div className="flex items-center gap-3">
-        <img src="/favicon.svg" alt="" width={36} height={36} />
-        <p className="text-sm tracking-widest text-clay">一九九二年 · 台灣</p>
-      </div>
-      <h1 className="mt-6 font-display text-6xl leading-none text-court md:text-7xl">網球人生</h1>
-    </header>
+    <>
+      {THEMES.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className="theme-pill"
+          aria-pressed={item.id === theme}
+          onClick={() => onPick(item.id)}
+        >
+          <span className="theme-dot" style={{ background: item.dot }} />
+          {item.label}
+        </button>
+      ))}
+    </>
   );
 }
 
@@ -310,6 +362,28 @@ function StoryBody({ card }: { card: Extract<GameState["card"], { kind: "story" 
           </p>
         ))}
       </div>
+      {card.receipt ? <ReceiptBlock receipt={card.receipt} /> : null}
+    </div>
+  );
+}
+
+function ReceiptBlock({ receipt }: { receipt: NonNullable<Extract<GameState["card"], { kind: "story" }>["receipt"]> }) {
+  return (
+    <div className="mt-8 border border-line bg-paper-deep px-4 py-4">
+      <p className="text-sm tracking-widest text-clay">你選了</p>
+      <p className="mt-1 text-lg">{receipt.choice}</p>
+      <p className="mt-4 text-sm tracking-widest text-muted">立刻</p>
+      <ul className="mt-2 space-y-1">
+        {receipt.now.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      {receipt.later ? (
+        <>
+          <p className="mt-4 text-sm tracking-widest text-muted">你還不知道的事</p>
+          <p className="mt-2 leading-relaxed">{receipt.later}</p>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -445,6 +519,25 @@ function EndingBody({
           ))}
         </ul>
       </div>
+      {state.decisions.length ? (
+        <details className="mt-8">
+          <summary className="text-sm tracking-widest text-clay">做過的選擇</summary>
+          <ul className="mt-3 max-h-80 space-y-2 overflow-auto">
+            {state.decisions
+              .filter(
+                (d) =>
+                  !d.choiceId.startsWith("child-year") &&
+                  !d.choiceId.startsWith("child-focus") &&
+                  !d.choiceId.startsWith("unhandled"),
+              )
+              .map((d, index) => (
+                <li key={`${d.choiceId}-${index}`} className="text-sm leading-relaxed">
+                  {d.age} 歲 · {d.text}
+                </li>
+              ))}
+          </ul>
+        </details>
+      ) : null}
       {state.gsResults.length ? (
         <p className="mt-6 text-sm leading-relaxed text-muted">{state.gsResults.slice(-6).join(" · ")}</p>
       ) : null}

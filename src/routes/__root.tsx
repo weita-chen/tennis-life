@@ -3,7 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "網球人生";
+const APP_NAME = "網球物語";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -13,9 +13,9 @@ export const Route = createRootRoute({
       { title: APP_NAME },
       {
         name: "description",
-        content: "從六歲打到你自己決定停下來的那一年。一個台灣選手的網球人生。",
+        content: "從六歲打到你自己決定停下來的那一年。一個台灣選手的網球物語。",
       },
-      { name: "theme-color", content: "#163528" },
+      { name: "theme-color", content: "#bb5522" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
@@ -25,7 +25,7 @@ export const Route = createRootRoute({
     ],
   }),
   component: () => (
-    <html lang="zh-Hant" suppressHydrationWarning>
+    <html lang="zh-Hant" data-slam="rg" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>

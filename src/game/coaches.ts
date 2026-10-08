@@ -1,9 +1,9 @@
-import type { Coach, StatKey, Wealth } from "./types";
+import type { Coach, GameState, StatKey, Wealth } from "./types";
 
 export const COACHES: Coach[] = [
   {
     id: "chen",
-    name: "陳石",
+    name: "陳建國",
     archetype: "嚴格的老派教練",
     line: "少講話，多打球。",
     tech: 1.2,
@@ -32,7 +32,7 @@ export const COACHES: Coach[] = [
   {
     id: "zhou",
     name: "周國強",
-    archetype: "體能很操的教練",
+    archetype: "高強度體能教練",
     line: "球感以後再說，先把體能練起來。",
     tech: 0.92,
     phys: 1.34,
@@ -146,4 +146,21 @@ export function coachMult(coach: Coach, key: StatKey, age: number): number {
 
 export function wealthLabel(w: Wealth): string {
   return { tight: "不寬裕", modest: "普通", comfortable: "小康", wealthy: "寬裕" }[w];
+}
+
+export function eligibleCoaches(s: GameState): Coach[] {
+  const network = (s.flags?.overseasNetwork ?? 0) > 0 || (s.flags?.metGreatCoach ?? 0) > 0;
+  return COACHES.filter((c) => {
+    if (c.minAge > s.age) return false;
+    if (c.id === s.coach.id) return false;
+    const ranked = s.ranking != null && s.ranking <= 40;
+    if (c.gate === "overseas") {
+      return s.overseas || s.wealth === "wealthy" || (s.ranking != null && s.ranking <= 25) || network;
+    }
+    if (c.gate === "money") {
+      return s.wealth === "wealthy" || s.wealth === "comfortable" || ranked || s.money > c.cost * 2;
+    }
+    if (s.wealth === "tight" && c.cost > 12_000 && s.money < c.cost) return false;
+    return true;
+  }).sort((a, b) => b.quality - a.quality);
 }

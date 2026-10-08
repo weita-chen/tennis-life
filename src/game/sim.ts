@@ -37,34 +37,19 @@ import type {
 export type Focus = "coach" | "tech" | "phys" | "mental" | "intense" | "rest" | "play";
 
 const TW_NAMES = [
-  "陳柏宏",
-  "林承恩",
-  "黃子軒",
-  "張家豪",
-  "吳承翰",
-  "周品睿",
-  "許宇翔",
-  "蔡廷恩",
-  "鄭宥辰",
-  "王紹齊",
-  "劉奕辰",
-  "楊宜謙",
-  "賴品睿",
-  "郭子恆",
-  "謝承恩",
-  "洪柏宇",
-  "羅家維",
-  "簡廷宇",
-  "葉承翰",
-  "吳昱成",
-  "陳冠宇",
-  "林敬恆",
-  "黃柏翰",
-  "張子謙",
-  "周宇恩",
-  "高承祐",
-  "潘柏辰",
-  "呂家凱",
+  "陳柏宏", "林承恩", "黃子軒", "張家豪", "吳承翰", "周品睿",
+  "許宇翔", "蔡廷恩", "鄭宥辰", "王紹齊", "劉奕辰", "楊宜謙",
+  "賴品睿", "郭子恆", "謝承恩", "洪柏宇", "羅家維", "簡廷宇",
+  "葉承翰", "吳昱成", "陳冠宇", "林敬恆", "黃柏翰", "張子謙",
+  "周宇恩", "高承祐", "潘柏辰", "呂家凱", "李建宏", "王志豪",
+  "張俊傑", "林冠廷", "陳建霖", "黃偉倫", "吳宗翰", "蔡俊宏",
+  "劉志明", "楊宗憲", "許家銘", "鄭明哲", "謝文彬", "洪國豪",
+  "郭世傑", "邱柏霖", "曾浩宇", "廖俊賢", "徐哲宇", "莊彥廷",
+  "葉冠霖", "蘇昱翔", "江承佑", "何宇軒", "羅信宏", "高凱翔",
+  "蕭瑞廷", "潘育誠", "朱家榮", "鍾明軒", "游俊安", "詹偉翔",
+  "胡志偉", "施冠豪", "沈柏翰", "余承澤", "杜彥宏", "范宗佑",
+  "彭浩翔", "陳品豪", "林廷瑋", "黃子豪", "張威廷", "吳宜霖",
+  "李俊廷", "王柏均", "蔡浩然", "劉冠傑", "楊瑞哲", "許育豪",
 ];
 
 const FOREIGN: [string, string][] = [
@@ -102,13 +87,13 @@ function withLevel(name: string, tier: Tier): string {
     tier === "gs"
       ? "大滿貫"
       : tier === "m1000"
-        ? "ATP 1000"
+        ? "大師賽"
         : tier === "atp500"
           ? "ATP 500"
           : tier === "atp250"
             ? "ATP 250"
             : tier === "ch"
-              ? "ATP 125 挑戰賽"
+              ? "挑戰賽"
               : null;
   if (!tag || name.includes(tag)) return name;
   return `${name}（${tag}）`;
@@ -204,7 +189,7 @@ function scratchJunior(t: Slot, results: TournamentResult[]): string | null {
   if (t.id === "jao" || t.id === "jrg" || t.id === "jwi") {
     const asia = results.find((r) => r.id.endsWith("-aj"));
     if (asia && !atLeast(asia.outcome, "四強") && !(nat && atLeast(nat.outcome, "亞軍"))) {
-      return "亞洲賽沒進前四，後面的大滿貫青少年就不去了。";
+      return "亞洲賽沒進前四，所以後面的青少年大滿貫也打不了。";
     }
   }
   return null;
@@ -304,13 +289,13 @@ export function buildSlate(state: GameState): Slot[] {
     if (state.age >= 13 && !natOk) {
       state.yearStory.push("全國賽還沒進前四，今年不出國。");
     } else if (state.age >= 14 && natOk && !slamOk && !light) {
-      state.yearStory.push("亞洲賽還沒進前四，青少年大滿貫沒排到你。");
+      state.yearStory.push("亞洲賽還沒進前四，所以這次沒有排進青少年大滿貫的參賽名單。");
     } else if (light && slamOk && state.age >= 14) {
       state.yearStory.push("這一年練得少，青少年大滿貫先不去。");
     }
   } else if (band === "col") {
-    out.push(tw("conf", "大專校際賽", "college", "hard", 4, 3));
-    out.push(tw("natc", "全國大專網球賽", "college", "hard", 5, 5, true));
+    out.push(tw("conf", "大學分區賽", "college", "hard", 4, 3));
+    out.push(tw("natc", "全國大學網球賽", "college", "hard", 5, 5, true));
     if (has(state, `summer:${year}`)) out.push(slot("itf-sum", "佛州 ITF", "itf", "hard", 5, 7));
   } else {
     const gs: Slot[] = [
@@ -391,6 +376,12 @@ export function buildSlate(state: GameState): Slot[] {
     }
     if (has(state, `wc:${year}`)) {
       out.push(slot("wc", "外卡會外賽", "atp250", "hard", 5, 6, true));
+    }
+    if (has(state, `wc500:${year}`)) {
+      out.push(slot("wc500", "外卡會外賽", "atp500", "hard", 5, 6, true));
+    }
+    if (has(state, `wcm:${year}`)) {
+      out.push(slot("wcm", "外卡會外賽", "m1000", "hard", 6, 6, true));
     }
   }
 
@@ -562,6 +553,7 @@ export function train(state: GameState, focus: Focus): void {
     if (state.overseas) g *= 1.06;
     if (state.peopleGaveUp) g *= 0.6;
     if (state.investLeft > 0) g *= 1.05;
+    g *= investBoost(state, key);
     state.stats[key] = clamp(cur + Math.max(0, Math.round(g)), 1, 99);
   }
   if (focus === "tech") {
@@ -605,7 +597,7 @@ export function train(state: GameState, focus: Focus): void {
     coach: "教練的表",
     tech: "技術",
     phys: "體能",
-    mental: "心理",
+    mental: "心態",
     intense: "加量",
     rest: "減量",
     play: "生活",
@@ -618,6 +610,31 @@ export function train(state: GameState, focus: Focus): void {
     text: `${state.year}，訓練重心是${labels[focus]}。`,
   });
   state.decisionIds.push(`train:${focus}:${state.year}`);
+  if (state.decisionIds.includes(`extra:${state.year}`)) {
+    state.overtrain = true;
+    if (state.schedule === "light") state.schedule = "normal";
+    else state.schedule = "heavy";
+  }
+  if (state.decisionIds.includes(`cut:${state.year}`)) {
+    state.overtrain = false;
+    state.schedule = state.schedule === "heavy" ? "normal" : "light";
+  }
+}
+
+function investBoost(state: GameState, key: StatKey): number {
+  const rows = state.investments ?? [];
+  const on = (kind: string) => rows.some((i) => i.kind === kind && i.untilYear >= state.year);
+  let m = 1;
+  if (on("tech") && (key === "serve" || key === "forehand" || key === "backhand" || key === "volley")) m *= 1.04;
+  if (on("fitness") && (key === "fitness" || key === "strength" || key === "speed")) m *= 1.05;
+  if (on("data") && key === "iq") m *= 1.05;
+  return m;
+}
+
+function shielded(state: GameState): boolean {
+  const rows = state.investments ?? [];
+  if (rows.some((i) => i.kind === "medical" && i.untilYear >= state.year)) return true;
+  return state.investLeft > 0;
 }
 
 function injuryRisk(state: GameState): number {
@@ -630,6 +647,8 @@ function injuryRisk(state: GameState): number {
   p -= (state.hidden.durability - 50) * 0.002;
   if (state.stats.fitness > 72) p -= 0.02;
   if (state.rushedReturn) p += 0.12;
+  if (state.decisionIds.includes(`chase:${state.year}`)) p += 0.04;
+  if (shielded(state)) p -= 0.035;
   return clamp(p, 0.02, 0.62);
 }
 
@@ -678,6 +697,13 @@ export function simulateSeason(state: GameState): void {
       const roll = inj();
       const part = pick(injRngSafe(state), HURT);
       if (roll < 0.18) {
+        if (shielded(state) && inj() < 0.5) {
+          state.injury = "moderate";
+          state.chronic = clamp(state.chronic + 6, 0, 100);
+          note = `${part}拉到了。團隊讓你停在這一站，沒有變成要開刀的傷。`;
+          stopped = true;
+          break;
+        }
         state.injury = "serious";
         state.chronic = clamp(state.chronic + 16, 0, 100);
         state.majorInjuries.push(`${state.year} ${part}重傷`);
@@ -912,7 +938,7 @@ export function simulateSeason(state: GameState): void {
   const deepBig = results.some((r) => (r.tier === "gs" || r.tier === "m1000") && atLeast(r.outcome, "十六強"));
   if ((state.ranking != null && state.ranking <= 40) || deepBig) state.bigTour = true;
   if (wasUp && wrecked && anchor != null && anchor <= 60 && (state.ranking == null || state.ranking > 140)) {
-    state.yearStory.push("這年的賽季被傷打亂了，明年得從比較小的比賽打回來。");
+    state.yearStory.push("這一季被傷勢打亂了。明年得從比較小的比賽重新打回來。");
   }
 
   if (state.ranking && (state.peakRank == null || state.ranking < state.peakRank)) {
@@ -999,7 +1025,7 @@ export function simulateSeason(state: GameState): void {
   };
   state.season = report;
   if (results.length === 0 && state.age >= 11) {
-    state.yearStory.push(state.missedHalf ? "這一年大部分比賽你都沒有出現。" : "這一年沒有正式賽事。");
+    state.yearStory.push(state.missedHalf ? "這一年大部分比賽你都沒能參加。" : "這一年沒有正式賽事。");
   }
 }
 

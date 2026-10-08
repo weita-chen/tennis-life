@@ -13,11 +13,11 @@ function identity(s: GameState): string {
   if (peak === 1) return "世界第一";
   if (gs >= 1 && talent < 72) return "意外的大滿貫冠軍";
   if (gs >= 1) return "大滿貫冠軍";
-  if (peak != null && peak <= 4 && finals && gs === 0) return "差一場的人";
-  if (peak != null && peak <= 8 && gs === 0) return "差冠軍一步";
+  if (peak != null && peak <= 4 && finals && gs === 0) return "差一步的頂尖選手";
+  if (peak != null && peak <= 8 && gs === 0) return "離冠軍只差一步";
   if (talent >= 84 && (peak == null || peak > 220) && (s.peopleGaveUp || s.age < 30)) return "被浪費的天才";
   if (s.firstTop100Age != null && s.firstTop100Age >= 26) return "大器晚成";
-  if (s.collegeTitles >= 2 && (peak == null || peak > 160)) return "大專網球圈記得的人";
+  if (s.collegeTitles >= 2 && (peak == null || peak > 160)) return "大學網球圈的強者";
   if (peak != null && peak <= 40) {
     return playingStyle(s.stats).includes("底線") ? "台灣的底線好手" : "巡迴賽的固定班底";
   }
@@ -31,14 +31,20 @@ function identity(s: GameState): string {
 function postCareer(s: GameState): string {
   const rng = rngFor(s.seed, "ending-job");
   const peak = s.peakRank ?? 999;
+  const flags = s.flags ?? {};
   const options: { item: string; w: number }[] = [];
-  if (s.stats.iq >= 58 || s.coachesHad.length >= 2) options.push({ item: "網球教練", w: 4 });
-  if (peak <= 40) options.push({ item: "轉播球評", w: 3 }, { item: "網球學院", w: 2 });
+  if (s.stats.iq >= 58 || s.coachesHad.length >= 2 || flags.coachingInterest) options.push({ item: "網球教練", w: flags.coachingInterest ? 6 : 4 });
+  if (peak <= 40 || flags.mediaExperience) options.push({ item: "轉播球評", w: flags.mediaExperience ? 5 : 3 });
+  if (peak <= 40) options.push({ item: "網球學院", w: flags.coachingInterest ? 4 : 2 });
   if (peak <= 100) options.push({ item: "球員經紀人", w: 2 });
-  if (s.money > 1_500_000 || s.earnings > 4_000_000) {
-    options.push({ item: "自己的品牌", w: 3 }, { item: "做體育相關的生意", w: 2 });
+  if (s.money > 1_500_000 || s.earnings > 4_000_000 || (flags.businessInterest ?? 0) > 0) {
+    options.push(
+      { item: "自己的品牌", w: (flags.businessInterest ?? 0) > 0 ? 6 : 3 },
+      { item: "做體育相關的生意", w: (flags.businessInterest ?? 0) > 0 ? 5 : 2 },
+    );
   }
-  if (s.degree) options.push({ item: "老師", w: 2 }, { item: "一份跟網球無關的工作", w: 2 });
+  if (flags.overseasNetwork) options.push({ item: "網球顧問", w: flags.coachingInterest ? 4 : 3 });
+  if (s.degree || (flags.academicSuccess ?? 0) >= 2) options.push({ item: "老師", w: (flags.academicSuccess ?? 0) >= 2 ? 4 : 2 }, { item: "一份跟網球無關的工作", w: flags.hobby ? 3 : 2 });
   if (s.partner) options.push({ item: "回家過生活", w: 2 });
   options.push({ item: "一份普通的工作", w: 2 });
   if (peak <= 120 && s.hidden.luck > 70 && s.stats.iq > 62 && !s.peopleGaveUp && s.stats.mental > 55) {
@@ -48,7 +54,7 @@ function postCareer(s: GameState): string {
 }
 
 function arc(s: GameState): string {
-  if (s.age < 14) return "你幾乎還沒開始。球拍放下時，手上連繭都還沒有。";
+  if (s.age < 14) return "你幾乎還沒真正開始，就離開了網球。";
   if (s.titles.gs >= 2) {
     return `你拿了 ${s.titles.gs} 座大滿貫。這沒辦法只用運氣解釋，雖然運氣確實幫過你。`;
   }
@@ -59,10 +65,10 @@ function arc(s: GameState): string {
     return `有好一陣子，大滿貫的種子名單上看得到你。生涯最高是世界第 ${s.peakRank}。`;
   }
   if (s.peakRank != null && s.peakRank <= 50) {
-    return `你曾經是會被排進會內賽的職業選手。最高世界第 ${s.peakRank}。打網球的人裡，能到這裡的不多。`;
+    return `你曾經是能打進職業賽會內賽的選手。最高世界第 ${s.peakRank}。打網球的人裡，能到這裡的不多。`;
   }
   if (s.peakRank != null && s.peakRank <= 150) {
-    return `你靠挑戰賽，再加上偶爾的 ATP 賽事，過了幾年。排名最好到世界第 ${s.peakRank}。不是傳奇，就是一份很累的工作。`;
+    return `你靠挑戰賽，再加上偶爾幾站 ATP 賽事，這樣打了幾年。生涯最高排名是世界第 ${s.peakRank}。不算傳奇，但這已經是一份很累的工作。`;
   }
   if (s.collegeTitles >= 1) {
     return "你打得最痛快的比賽都在大學。觀眾不多，但那個球場你打得很開心。";
@@ -71,12 +77,12 @@ function arc(s: GameState): string {
 }
 
 function feeling(s: GameState, label: string): string {
-  if (label === "差一場的人" || label === "差冠軍一步") {
+  if (label === "差一步的頂尖選手" || label === "離冠軍只差一步") {
     const rival = s.notableWins[0]?.match(/擊敗(\S+)/)?.[1];
-    return `你這輩子一直在追同一群人${rival ? `，其中包括${rival}` : ""}。你贏過很強的人，也打進過後面的輪次。可是那個能讓你變成世界第一的晚上，沒有來。差距沒有很大，就是差最後那一場。`;
+    return `你這輩子一直在追同一群人${rival ? `，其中包括${rival}` : ""}。你贏過很強的人，也打進過大滿貫後段。你離世界第一一直很近，但最後始終差一個冠軍。`;
   }
   if (label === "被浪費的天才") {
-    return "很早以前就有人覺得你跟別人不一樣。後來那些人一個一個不再提了。世界沒有欠你一座獎盃。有些年份你拿去換了別的東西，那些選擇也不全是錯的。只是網球沒有再等你。";
+    return "很早以前就有人覺得你跟別人不一樣。後來，那些人一個個不再提起這件事。你不是沒有機會，只是有些年份，你把時間花在了別的地方。那些選擇不一定是錯的，只是最後沒有把你帶回網球場。";
   }
   if (label === "意外的大滿貫冠軍") {
     return "以你起步的條件，這座冠軍本來不該發生，但它還是發生了。後來常有人問你有什麼秘密。你沒有。你只是那天每一分都咬住了。";
@@ -98,12 +104,14 @@ function feeling(s: GameState, label: string): string {
 
 function people(s: GameState): string {
   const coaches = s.coachesHad.filter((n, i) => s.coachesHad.indexOf(n) === i).slice(0, 3).join("、");
-  const coachLine = coaches ? `帶過你的教練有${coaches}。` : "沒有固定帶過你的教練。";
+  const coachLine = coaches ? `你一路合作過的教練有${coaches}。` : "沒有固定合作過的教練。";
   const home = `家境${wealthLabel(s.wealth)}。早年有多少資源，後來別人問你怎麼開始的，你還是得講，不管你想不想講。`;
   const love = s.partner
     ? `感情裡有${s.partner.name}。這件事沒讓你多贏球，也沒寫進成績。`
     : "感情這件事，你沒有認真談過。";
-  return `${coachLine}${home}${love}`;
+  const rival = s.rivals?.[0];
+  const rivalLine = rival ? `${rival.name}是你從青少年就碰上的人。` : "";
+  return `${coachLine}${home}${love}${rivalLine}`;
 }
 
 function after(s: GameState, post: string): string {
@@ -117,10 +125,13 @@ function after(s: GameState, post: string): string {
     return `你沒有再追排名，改看別人的正拍。${s.titles.gs ? "學生們知道你拿過大滿貫。" : "有的學生後來成績比你好，有的沒有。"}你都還在場邊。`;
   }
   if (post === "回家過生活") {
-    return "網球退到生活後面。你沒有覺得自己輸了，只是晚上終於可以留給沒有比賽的人。";
+    return "網球慢慢退到生活後面。你沒有覺得自己輸了，只是終於不用再把每個晚上都留給下一場比賽。";
   }
   if (post === "自己的品牌" || post === "做體育相關的生意") {
-    return "你後來做的事還是跟網球有關，只是不用再靠膝蓋賺錢。錢還在，名字也還在，只是出現的地方換了。";
+    return "你後來做的事還是跟網球有關，只是不用再靠自己的身體賺錢。你還是會出現在網球場，只是身分不一樣了。";
+  }
+  if (post === "網球顧問") {
+    return "你後來還是在球場邊。只是球場常常不在台灣。你認得的人，有些是很早以前訓練營留下的。";
   }
   return "後來沒有再拿獎盃，日子還是過得下去。沒當過世界第一的人，也可以過得很好。這一生就這樣了。";
 }
@@ -129,6 +140,8 @@ export function buildEnding(s: GameState): Ending {
   const label = identity(s);
   const post = postCareer(s);
   const paragraphs = [arc(s), feeling(s, label), people(s), after(s, post)];
+  const remembered = (s.memories ?? []).filter((m) => m.id !== "firstCoach" && m.id !== "firstRival");
+  if (remembered.length) paragraphs.push(remembered.slice(0, 4).map((m) => m.text).join(""));
   if (s.retiredReason) paragraphs[0] = `${s.retiredReason}${paragraphs[0]}`;
 
   const h2h = Object.entries(s.h2h)
@@ -143,9 +156,9 @@ export function buildEnding(s: GameState): Ending {
   const tennis: { label: string; value: string }[] = [
     { label: "最高排名", value: s.peakRank ? `世界第 ${s.peakRank}${s.peakRankYear ? `（${s.peakRankYear}）` : ""}` : "沒有職業排名" },
     { label: "大滿貫", value: s.titles.gs ? `${s.titles.gs} 座` : s.bestGs !== "—" ? `最好到${s.bestGs}` : "—" },
-    { label: "ATP 1000", value: String(s.titles.m1000) },
+    { label: "大師賽", value: String(s.titles.m1000) },
     { label: "ATP 冠軍", value: String(s.titles.atp) },
-    { label: "ATP 125", value: String(s.titles.ch) },
+    { label: "挑戰賽", value: String(s.titles.ch) },
     { label: "生涯獎金", value: money(s.earnings) },
     { label: "勝－敗", value: `${s.wins}–${s.losses}` },
     { label: "巡迴賽年數", value: s.yearsPro ? `${s.yearsPro} 年` : "—" },
@@ -167,10 +180,19 @@ export function buildEnding(s: GameState): Ending {
     { label: "離開時的錢", value: money(s.money) },
     { label: "後來", value: post },
   ];
+  if (remembered.length) {
+    life.push({
+      label: "記得",
+      value: remembered
+        .slice(0, 3)
+        .map((m) => m.text.replace(/。$/, ""))
+        .join("；"),
+    });
+  }
 
   const history = s.historyChanges.length
     ? s.historyChanges.slice(-8)
-    : ["這一生沒有改寫大滿貫的冠軍名單。沒改寫紀錄的人生，也一樣算數。"];
+    : ["這一生沒有改寫大滿貫的冠軍名單。你沒有留下什麼驚人的紀錄，但這一生還是有它自己的成績。"];
 
   const headline =
     s.peakRank === 1
@@ -179,8 +201,8 @@ export function buildEnding(s: GameState): Ending {
         ? "你拿過大滿貫。"
         : label === "被浪費的天才"
           ? "你本來可以打得更好。"
-          : label === "差一場的人"
-            ? "你差一場。"
+          : label === "差一步的頂尖選手"
+            ? "你差一步。"
             : "這是完整的一生。";
 
   return {

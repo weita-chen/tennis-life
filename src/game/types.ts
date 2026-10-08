@@ -84,6 +84,7 @@ export interface StoryCard {
   title: string;
   body: string;
   choices: Choice[];
+  receipt?: Receipt;
 }
 
 export interface MatchLine {
@@ -131,6 +132,19 @@ export interface Summary {
   results: { name: string; outcome: string; surface: Surface }[];
 }
 
+export interface Memory {
+  id: string;
+  year: number;
+  age: number;
+  text: string;
+}
+
+export interface Receipt {
+  choice: string;
+  now: string[];
+  later?: string;
+}
+
 export interface DecisionRecord {
   year: number;
   age: number;
@@ -153,6 +167,24 @@ export type Card =
   | { kind: "season"; report: SeasonReport }
   | { kind: "summary"; summary: Summary }
   | { kind: "ending"; ending: Ending };
+
+export interface Rival {
+  name: string;
+  style: string;
+  bond: "rival" | "friend" | "respect" | "bitter";
+  form: number;
+  ceiling: number;
+}
+
+export interface Investment {
+  kind: "medical" | "fitness" | "tech" | "data" | "network";
+  untilYear: number;
+}
+
+export interface Echo {
+  year: number;
+  text: string;
+}
 
 export interface Step {
   type: "training" | "event";
@@ -249,4 +281,13 @@ export interface GameState {
   lastJunior: { nat: string | null; asia: string | null };
   /** 曾經打進大師賽或大滿貫層級。健康的年份不會掉回 ITF。 */
   bigTour: boolean;
+  /** 不顯示給玩家的後果。值是發生年份，或次數。 */
+  flags: Record<string, number>;
+  rivals: Rival[];
+  investments: Investment[];
+  echoes: Echo[];
+  /** 這一年還沒走完的卡。 */
+  yearQueue: string[];
+  /** 玩家事後還認得出來的事。不是隱藏數值。 */
+  memories: Memory[];
 }
