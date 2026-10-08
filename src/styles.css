@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "GuanKiapTsingKhai";
+  src: url("/fonts/GuanKiapTsingKhai-TW.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --color-paper: #f3efe4;
+  --color-paper-deep: #e6decc;
+  --color-ink: #1c241c;
+  --color-muted: #5e675c;
+  --color-line: #d4cbb6;
+  --color-court: #163528;
+  --color-court-2: #214a38;
+  --color-ball: #e4c15a;
+  --color-clay: #9a3b22;
+  --color-cream: #faf7f0;
+  --font-serif: "GuanKiapTsingKhai", "Songti TC", "PMingLiU", serif;
+  --font-display: "GuanKiapTsingKhai", "Songti TC", "PMingLiU", serif;
+  --radius-card: 1.25rem;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-serif);
+    text-wrap: pretty;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background: #e4c15a;
+    color: #1c241c;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.card-in {
+  animation: rise 240ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-in {
+    animation: none;
+  }
+}
